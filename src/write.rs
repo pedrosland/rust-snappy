@@ -9,7 +9,12 @@ It would also be possible to provide a `write::FrameEncoder`, which decompresses
 data as it writes it, but it hasn't been implemented yet.
 */
 
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
+
+#[cfg(feature = "tokio")]
+use futures::Poll;
+#[cfg(feature = "tokio")]
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use compress::Encoder;
 use error::{IntoInnerError, new_into_inner_error};
@@ -90,6 +95,12 @@ impl<W: Write> FrameEncoder<W> {
     pub fn get_ref(&self) -> &W {
         &self.inner.as_ref().unwrap().w
     }
+
+    /// Consumes this encoder and returns the underlying writer.
+    pub fn take_inner(mut self) -> W {
+        let inner = self.inner.take().unwrap();
+        inner.w
+    }
 }
 
 impl<W: Write> Drop for FrameEncoder<W> {
@@ -145,7 +156,39 @@ impl<W: Write> Write for FrameEncoder<W> {
     }
 }
 
-impl<W: Write> Inner<W> {
+// impl<W: Read> Read for FrameEncoder<W> {
+// }
+
+impl<R: Read + Write> Read for FrameEncoder<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.as_mut().unwrap().w.read(buf)
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<R: AsyncRead + Write> AsyncRead for FrameEncoder<R> {}
+
+// impl<W: Read + Write> Write for FrameEncoder<W> {
+//     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+//         self.inner.unwrap().write(buf)
+//     }
+
+//     // fn flush(&mut self) -> io::Result<()> {
+//     //     self.flush()
+//     // }
+// }
+
+#[cfg(feature = "tokio")]
+impl<W: AsyncWrite> AsyncWrite for FrameEncoder<W> {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        // self.inner.as_mut().unwrap().w.finish()
+        self.flush().unwrap();
+        self.inner.as_mut().unwrap().w.shutdown()
+        // self.inner.get_mut().shutdown()
+    }
+}
+
+impl<W: Write> Write for Inner<W> {
     fn write(&mut self, mut buf: &[u8]) -> io::Result<usize> {
         let mut total = 0;
         if !self.wrote_stream_ident {
@@ -173,4 +216,15 @@ impl<W: Write> Inner<W> {
         }
         Ok(total)
     }
+
+    fn flush(&mut self) -> io::Result<()> {
+        unimplemented!()
+    }
 }
+
+// #[cfg(feature = "tokio")]
+// impl<W: AsyncWrite> AsyncWrite for Inner<W> {
+//     fn shutdown(&mut self) -> Poll<(), io::Error> {
+//         self.w.shutdown()
+//     }
+// }

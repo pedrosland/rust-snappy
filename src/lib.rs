@@ -94,6 +94,10 @@ extern crate quickcheck;
 extern crate rand;
 #[cfg(all(test, feature = "cpp"))]
 extern crate snappy_cpp;
+#[cfg(feature = "tokio")]
+extern crate futures;
+#[cfg(feature = "tokio")]
+extern crate tokio_io;
 
 pub use compress::{Encoder, max_compress_len};
 pub use decompress::{Decoder, decompress_len};

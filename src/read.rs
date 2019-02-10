@@ -13,7 +13,12 @@ Typically, `read::FrameDecoder` is the version that you'll want.
 
 use byteorder::{ReadBytesExt, ByteOrder, LittleEndian as LE};
 use std::cmp;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
+
+#[cfg(feature = "tokio")]
+use futures::Poll;
+#[cfg(feature = "tokio")]
+use tokio_io::{AsyncRead, AsyncWrite};
 
 use compress::Encoder;
 use decompress::{Decoder, decompress_len};
@@ -193,6 +198,33 @@ impl<R: Read> Read for FrameDecoder<R> {
         }
     }
 }
+
+impl<W: Read + Write> Write for FrameDecoder<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.r.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.r.flush()
+    }
+}
+
+#[cfg(feature = "tokio")]
+impl<W: Read + AsyncWrite> AsyncWrite for FrameDecoder<W> {
+    fn shutdown(&mut self) -> Poll<(), io::Error> {
+        // self.inner.get_mut().unwrap().finish();
+        self.r.shutdown()
+    }
+}
+
+// impl<W: Read + Write> Read for FrameDecoder<W> {
+//     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+//         self.inner.get_mut().read(buf)
+//     }
+// }
+
+#[cfg(feature = "tokio")]
+impl<W: AsyncRead> AsyncRead for FrameDecoder<W> {}
 
 // read_exact_eof is like Read::read_exact, except it converts an UnexpectedEof
 // error to a bool of false.
